@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Chrismas Tree Species</title>
+  <link href="https://fonts.googleapis.com/css?family=Ubuntu:300&display=swap" rel="stylesheet">
+  <style>
+    * {
+       font-family: 'Ubuntu', sans-serif !important;
+    }    
+    html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+    .esri-popup .esri-popup-header .esri-title {
+        font-size: 18px;
+        font-weight: bolder;
+    }
+
+    .esri-popup .esri-popup-body .esri-popup-content {
+        font-size: 14px;
+    }
+  </style>
+
+  <!-- google ajax CDN -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script
+      src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+      integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+      crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.13/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.13/"></script>
+  <script>
+    String.prototype.format = function () {
+        var i = 0, args = arguments;
+        return this.replace(/{}/g, function () {
+            return typeof args[i] != 'undefined' ? args[i++] : '';
+        });
+    };
+    function toDDM(coord){
+        // Convert coordinates to DDM for map popup    
+        this.convert = function(_coord){
+            _coord = Math.abs(_coord);
+            var degrees = Math.floor(_coord);
+            var minutes = (_coord - degrees ) * 60;
+            return degrees + '&deg; ' + minutes.toFixed(3) + "'";
+        };
+        this.lat = this.convert(coord.latitude) + (coord.latitude > 0 ? ' N' : ' S');
+        this.lng = this.convert(coord.longitude) + (coord.longitude > 0 ? ' E' : ' W');
+    }
+    var map, view, 
+        TZOffset = new Date().getTimezoneOffset()*60000,
+        Red_Fir_url = 'https://apps.fs.usda.gov/fsgisx01/rest/services/RDW_FHP_TreeSpeciesMetrics/California_red_fir_StandDensityIndex_2002/ImageServer',
+        White_Fir_url = 'https://apps.fs.usda.gov/fsgisx01/rest/services/RDW_FHP_TreeSpeciesMetrics/white_fir_StandDensityIndex_2002/ImageServer',
+        Cedar_url = 'https://apps.fs.usda.gov/fsgisx01/rest/services/RDW_FHP_TreeSpeciesMetrics/incense_cedar_StandDensityIndex_2002/ImageServer',
+        USGSTopo_url = 'https://basemap.nationalmap.gov/ArcGIS/rest/services/USGSTopo/MapServer',
+        WorldImage_url = 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
+        FSTopo_url = "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_FSTopo_01/MapServer"
+        FSAdmin_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer',
+        FSTrail_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TrailNFSPublishForSync_01/FeatureServer/0',
+        FSRoad_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasicForSync_01/FeatureServer/2',
+        FSRec_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RecreationSitesOpenForSync_01/FeatureServer/0',
+        USGSTransport_url = 'https://services.nationalmap.gov/arcgis/rest/services/WFS/transportation/MapServer',
+        //USGSTransport_url = 'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer',
+        FSStations_url = 'https://apps.fs.usda.gov/fsgisx02/rest/services/wo_ops_teams/S_WO_OPS_TEAMS_EU_SOI_01/FeatureServer/0',
+        FireZone_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/forecast_meteoceanhydro_pts_zones_geolinks/MapServer',
+        Geomac_url = 'https://wildfire.cr.usgs.gov/arcgis/rest/services/geomac_dyn/MapServer',
+        WFAS_url = "https://www.wfas.net/cgi-bin/mapserv?map=/var/www/html/nfdr/mapfiles/ndfd_geog5.map&",
+        Nexrad_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer',
+        snow_url = "https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer",
+        SurfaceObservation_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/obs_meteocean_insitu_sfc_time/MapServer',
+        Smoke_url = 'https://idpgis.ncep.noaa.gov/arcgis/services/NWS_Forecasts_Guidance_Warnings/ndgd_smoke_sfc_1hr_avg_time/ImageServer/WMSServer?',
+        NasaGibs_url = 'https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.jpg',
+        USGS_elevationQuery_url = 'https://nationalmap.gov/epqs/pqs.php?x={}&y={}&units=Feet&output=json';
+    require([
+    "esri/Map",
+    "esri/views/MapView",
+    "esri/layers/ImageryLayer",
+    "esri/layers/MapImageLayer",
+    "esri/layers/TileLayer",
+    "esri/layers/FeatureLayer",
+    "esri/layers/GroupLayer",
+    "esri/widgets/Expand",
+    "esri/widgets/Legend",
+    "esri/widgets/LayerList",
+    "esri/Basemap",
+    "esri/widgets/BasemapToggle",
+    "esri/widgets/CoordinateConversion",
+    "esri/renderers/RasterStretchRenderer",
+    "esri/tasks/support/AlgorithmicColorRamp",
+    ], function(Map, MapView, ImageryLayer, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, 
+        Expand, Legend, LayerList, BaseMap, BasemapToggle, CoordinateConversion, RasterStretchRenderer, AlgorithmicColorRamp) {
+        
+        //Tree Species
+        var colorRamp = new AlgorithmicColorRamp({
+            algorithm: 'hsv',
+            fromColor: '#faff99',
+            toColor: '#007521',
+        });
+        var RasterRender = new RasterStretchRenderer({
+            colorRamp: colorRamp,
+        });
+
+        var Red_Fir = new ImageryLayer({
+            url: Red_Fir_url,
+            id: "Red_Fir",
+            title: 'Red Fir Stand Density',
+            renderer: RasterRender,
+        });
+        var White_Fir = new ImageryLayer({
+            url: White_Fir_url,
+            id: "White_Fir",
+            title: 'White Fir Stand Density',
+            renderer: RasterRender,
+        });
+        var Cedar = new ImageryLayer({
+            url: Cedar_url,
+            id: "Cedar",
+            title: 'Incense Cedar Stand Density',
+            renderer: RasterRender,
+        });
+        var TreeGroup = new GroupLayer({
+            title: 'Tree Species',
+            id: 'TreeSPP',
+            layers: [Cedar, White_Fir, Red_Fir],
+            visibilityMode: 'exclusive',
+            opacity: 0.6,
+        });
+        // Snow depth
+        var snowLayer = new MapImageLayer({
+            url: snow_url,
+            opacity: 0.6,
+            sublayers: [{
+                id: 3,
+                visible: true,
+                title: 'Snow Depth (in)'
+            }
+          ]
+        });
+
+        // USFS layers
+        var road_template = {
+                        title: '{ID} | {NAME}',
+                        content: [{
+                            type: "fields",
+                            fieldInfos: [{
+                                    fieldName: "OPER_MAINT_LEVEL",
+                                    label: "OPER_MAINT_LEVEL",
+                                    visible: true,
+                                },{
+                                    fieldName: "SURFACE_TYPE",
+                                    label: "SURFACE_TYPE",
+                                    visible: true
+                                },{
+                                    fieldName: "JURISDICTION",
+                                    label: "JURISDICTION",
+                                    visible: true
+                                },{
+                                    fieldName: "MANAGING_ORG",
+                                    label: "MANAGING_ORG",
+                                    visible: true
+                                },{
+                                    fieldName: "OPENFORUSETO",
+                                    label: "OPENFORUSETO",
+                                    visible: true
+                                },{
+                                    fieldName: "GIS_MILES",
+                                    label: "GIS_MILES",
+                                    visible: true
+                                }]
+                        }]
+                    }
+        var trail_template = {
+                        title: '{TRAIL_NO} | {TRAIL_NAME}',
+                        content: [{
+                            type: "fields",
+                            fieldInfos: [{
+                                    fieldName: "TRAIL_TYPE",
+                                    label: "TRAIL_TYPE",
+                                    visible: true,
+                                },{
+                                    fieldName: "TRAIL_CLASS",
+                                    label: "TRAIL_CLASS",
+                                    visible: true
+                                },{
+                                    fieldName: "ALLOWED_TERRA_USE",
+                                    label: "ALLOWED_TERRA_USE",
+                                    visible: true
+                                },{
+                                    fieldName: "MANAGING_ORG",
+                                    label: "MANAGING_ORG",
+                                    visible: true
+                                },{
+                                    fieldName: "GIS_MILES",
+                                    label: "GIS_MILES",
+                                    visible: true
+                                }]
+                        }]
+                    }
+        var FSCarto = new MapImageLayer({
+            url: 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMCartography_01/MapServer',
+            id: 'FSCarto',
+            title: 'Roads and Trails',
+            listMode: 'hide-children',
+            minScale: 200000,
+            visible: false,
+            sublayers: [
+                {
+                    id: 6,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: road_template
+                },{
+                    id: 5,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: road_template
+                },{
+                    id: 4,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: trail_template
+                },{
+                    id: 3,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: trail_template
+                },{
+                    id: 2,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: trail_template
+                }
+            ]
+        });
+
+        var FSTopo = new TileLayer({
+            url: FSTopo_url,
+            id: "FSTopo",
+            title: 'FS Topo',
+            //minScale: 200000,
+            //listMode: 'hide-children',
+            //visible: false
+        });
+        var admin = new MapImageLayer({
+            url: "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer", // AdminBoundary
+            id: "admin",
+            title: 'Administrative Boundary',
+            listMode: 'hide-children',
+        });
+        var FSOwner = FeatureLayer({
+            url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_BasicOwnership_02/MapServer/0',
+            id: 'FSOwner',
+            title: 'Private Land',
+            minScale: 400000,
+            visible: false,
+            definitionExpression: "OWNERCLASSIFICATION IN ('NON-FS', 'UNPARTITIONED RIPARIAN INTEREST')",
+            renderer: {
+                type: "simple",
+                symbol: {
+                    type: "simple-fill",
+                    style: "solid",
+                    color: [100, 100, 100, 1],
+                    outline: {
+                        type: "simple-line",
+                        style: "solid",
+                        color: [200, 200, 200, 1],
+                        width: 0.5
+                    }
+                }
+            },
+            opacity: 0.4,
+        });
+        var FSWilderness = FeatureLayer({
+            url: 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMReference_01/MapServer/6',
+            id: 'FSWilderness',
+            title: 'Wilderness',
+            opacity: 0.6,
+            labelsVisible: false,
+            visible: false,
+        });
+        var USFSgroup = new GroupLayer({
+            title: 'US Forest Service Layers',
+            id: 'USFS',
+            layers: [FSOwner, admin, FSWilderness, FSCarto],
+            visibilityMode: 'independent'
+        });
+        // Create a custom basemap because the out-of-the-box terrain has wrong reference text
+        var customBasemap = new BaseMap({
+            baseLayers: [
+                new MapImageLayer({
+                    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer"
+                }),
+                new MapImageLayer({
+                    url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer",
+                    opacity: 0.25
+                })
+            ],
+            referenceLayers: [
+                new MapImageLayer({
+                    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer"
+                })
+            ],
+            title: "Custom Basemap",
+            id: "myBasemap"
+        });
+        var map = new Map({
+                basemap: customBasemap,//"topo-vector",
+                layers: [TreeGroup, USFSgroup, snowLayer]
+        });
+        var view = new MapView({
+            map: map,
+            container: "viewDiv",
+            center: [-120.39, 38.78],
+            zoom: 11,
+            scale: 300000,
+            //popup: {
+            //    defaultPopupTemplateEnabled: true
+            //}
+        });
+
+
+        view.when(function() {
+            Red_Fir.visible = true;
+        
+            //// Legend widget
+            //var legend = new Legend({
+            //    container: document.createElement("div"),
+            //    view: view,
+            //    //style: 'classic',//{type:'card', layout: 'stack'},
+            //});
+            //var legendExpand = new Expand({
+            //    expandIconClass: "esri-icon-layers",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+            //    expandTooltip: "Legend", // optional, defaults to "Expand" for English locale
+            //    view: view,
+            //    expanded: false,
+            //    content: legend.domNode
+            //});
+            //view.ui.add(legendExpand, "top-right");
+            // Layer List
+            var layerList = new LayerList({
+                container: document.createElement("div"),
+                view: view,
+                // Legend in layer list
+                //listItemCreatedFunction: function(event) {
+                //    if (event.item.layer.type != "group") {
+                //        event.item.panel = {
+                //            content: "legend",
+                //            open: false
+                //        };
+                //    }
+                //}
+            });
+            view.ui.add(layerList, "top-left");
+    
+            // CoordinateConversion widget
+            var ccWidget = new CoordinateConversion({
+                view: view
+            });
+            view.ui.add(ccWidget, "bottom-left");
+            // Basemap toggle
+            var basemapToggle = new BasemapToggle({
+                view: view,  // The view that provides access to the map's "streets" basemap
+                nextBasemap: new BaseMap({baseLayers: [FSTopo]}) // Allows for toggling to the "hybrid" basemap
+            });
+            view.ui.add(basemapToggle, {position: "bottom-right"});
+        });
+    });
+
+
+
+  </script>
+</head>
+
+<body>
+    <div id="viewDiv">
+    </div>
+</body>
+
+</html>
