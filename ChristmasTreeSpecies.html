@@ -365,7 +365,7 @@
                 expandIconClass: "esri-icon-layers",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
                 expandTooltip: "Layer List", // optional, defaults to "Expand" for English locale
                 view: view,
-                expanded: window.mobilecheck,
+                expanded: window.mobilecheck() ? false : true,
                 content: layerList.domNode
             });
             view.ui.add(layerlistExpand, "top-left");
