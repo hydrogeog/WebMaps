@@ -98,17 +98,32 @@
     "esri/widgets/CoordinateConversion",
     "esri/renderers/RasterStretchRenderer",
     "esri/tasks/support/AlgorithmicColorRamp",
+    "esri/tasks/support/MultipartColorRamp",
     ], function(Map, MapView, ImageryLayer, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, 
-        Expand, Legend, LayerList, BaseMap, BasemapToggle, CoordinateConversion, RasterStretchRenderer, AlgorithmicColorRamp) {
+        Expand, Legend, LayerList, BaseMap, BasemapToggle, CoordinateConversion, RasterStretchRenderer, AlgorithmicColorRamp, MultipartColorRamp) {
         
         //Tree Species
-        var colorRamp = new AlgorithmicColorRamp({
-            algorithm: 'hsv',
-            fromColor: '#faff99',
-            toColor: '#007521',
-        });
+        var viridis = ["#FDE724", "#F1E51C", "#D7E219", "#BDDE26", "#A2DA37", "#88D547", "#70CE56", "#59C764", "#45BF6F", 
+            "#35B778", "#28AE7F", "#20A585", "#1E9B89", "#1F928C", "#23898D", "#267F8E", "#2A768E", "#2E6C8E", "#32628D", 
+            "#37588C", "#3C4D8A", "#414286", "#453681", "#472A79", "#481D6F"];
+        var viridis_ramp = [];
+        for (var c = 0; c < viridis.length - 1; c=c+2) {
+            viridis_ramp.push(new AlgorithmicColorRamp({
+                algorithm: 'hsv',
+                fromColor: viridis[c],
+                toColor: viridis[c+1],
+            }))
+        };
+        
+        var colorRamp = new MultipartColorRamp({colorRamps: viridis_ramp});
+        console.log(colorRamp.toJSON())
         var RasterRender = new RasterStretchRenderer({
             colorRamp: colorRamp,
+            useGamma: true, 
+            gamma: 1.7,
+            stretchType: 'percent-clip',
+            minPercent: 0.25,
+            maxPercent: 0.25,
         });
 
         var Red_Fir = new ImageryLayer({
@@ -134,7 +149,7 @@
             id: 'TreeSPP',
             layers: [Cedar, White_Fir, Red_Fir],
             visibilityMode: 'exclusive',
-            opacity: 0.6,
+            //opacity: 0.6,
         });
         // Snow depth
         var snowLayer = new MapImageLayer({
