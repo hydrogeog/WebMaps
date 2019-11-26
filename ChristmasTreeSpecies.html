@@ -356,7 +356,14 @@
                 //    }
                 //}
             });
-            view.ui.add(layerList, "top-left");
+            var layerlistExpand = new Expand({
+                expandIconClass: "esri-icon-layers",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+                expandTooltip: "Layer List", // optional, defaults to "Expand" for English locale
+                view: view,
+                expanded: true,
+                content: layerList.domNode
+            });
+            view.ui.add(layerlistExpand, "top-left");
     
             // CoordinateConversion widget
             var ccWidget = new CoordinateConversion({
@@ -368,7 +375,7 @@
                 view: view,  // The view that provides access to the map's "streets" basemap
                 nextBasemap: new BaseMap({baseLayers: [FSTopo]}) // Allows for toggling to the "hybrid" basemap
             });
-            view.ui.add(basemapToggle, {position: "bottom-right"});
+            //view.ui.add(basemapToggle, {position: "bottom-right"});
         });
     });
 
