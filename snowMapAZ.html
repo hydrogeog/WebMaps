@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!--<meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no"> -->
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <title>Snow Map</title>
+    <link href="https://fonts.googleapis.com/css?family=Ubuntu&display=swap" rel="stylesheet">
+    <style>
+    * {
+       font-family: 'Ubuntu', sans-serif !important;
+    }    
+    html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+    #timeSliderDiv {
+        position: absolute;
+        left: 100px;
+        right: 100px;
+        //left: 50px;
+        //right: 50px;
+        //max-width: 1000px;
+        bottom: 20px;
+        display: none;
+    }
+    #plotDiv{
+        position: absolute;
+        width: auto;
+        min-height: 50px;
+        left: 335px;
+        right: 292px;
+        bottom: 120px;
+        background-color: rgba(255, 255, 255, 0.9);
+        display: none;
+    }
+    #myChart{
+        width: auto;
+        height: auto;
+    }
+    .esri-popup .esri-popup-header .esri-title {
+        font-size: 18px;
+        font-weight: bolder;
+    }
+    .esri-popup .esri-popup-body .esri-popup-content {
+        font-size: 14px;
+    }
+    .esri-feature {
+        font-family: monospace;
+        padding: 8px;
+        z-index: 1000;
+        white-space: pre;
+        //max-width: 800px;
+        max-height: 300px;
+        overflow: auto;
+    }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.12/esri/css/main.css">
+    <script src="https://js.arcgis.com/4.12/"></script>
+    
+    <!-- google ajax CDN -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css"></link>
+    <script>
+        const options = {
+            // tell Dojo where to load other packages
+            dojoConfig: {
+                async: true,
+            packages: [
+                {
+                    location: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0-rc.1/Chart.bundle.js',
+                    name: 'Chart'
+                }
+            ]}
+        };
+    </script>
+    <script>
+    String.prototype.format = function () {
+      var i = 0, args = arguments;
+      return this.replace(/{}/g, function () {
+        return typeof args[i] != 'undefined' ? args[i++] : '';
+      });
+    };
+    function toDDM(coord){
+        // Convert coordinates to DDM for map popup    
+        this.convert = function(_coord){
+            _coord = Math.abs(_coord);
+            var degrees = Math.floor(_coord);
+            var minutes = (_coord - degrees ) * 60;
+            return degrees + '&deg; ' + minutes.toFixed(3) + "'";
+        };
+        this.lat = this.convert(coord.latitude) + (coord.latitude > 0 ? ' N' : ' S');
+        this.lng = this.convert(coord.longitude) + (coord.longitude > 0 ? ' E' : ' W');
+    };
+    function inches2feet(raw) {
+        var total = parseFloat(raw);
+        var inches = total % 12;
+        if (total >= 12) {
+            return "{} ft {} in".format((total - inches)/12, inches.toFixed(1))
+        } else {
+            return "{} in".format(total.toFixed(1))
+        }
+    };
+    window.mobilecheck = function() {
+        var check = false;
+        (function(a){if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(a)||/1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0,4))) check = true;})(navigator.userAgent||navigator.vendor||window.opera);
+        return check;
+    };
+    var map, view, timeSlider, NDFDCurrentLayerInfo, NDFDMapPointForecast, changeMode, previousMode, legendJSON,
+        USGSTopo_url = 'https://basemap.nationalmap.gov/ArcGIS/rest/services/USGSTopo/MapServer',
+        WorldImage_url = 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
+        FSTopo_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_FSTopo_01/MapServer',
+        FSAdmin_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer',
+        FSTrail_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TrailNFSPublishForSync_01/FeatureServer/0',
+        FSRoad_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasicForSync_01/FeatureServer/2',
+        FSRec_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RecreationSitesOpenForSync_01/FeatureServer/0',
+        USGSTransport_url = 'https://services.nationalmap.gov/arcgis/rest/services/WFS/transportation/MapServer',
+        //USGSTransport_url = 'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer',
+        FSStations_url = 'https://apps.fs.usda.gov/fsgisx02/rest/services/wo_ops_teams/S_WO_OPS_TEAMS_EU_SOI_01/FeatureServer/0',
+        FireZone_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/forecast_meteoceanhydro_pts_zones_geolinks/MapServer',
+        Geomac_url = 'https://wildfire.cr.usgs.gov/arcgis/rest/services/geomac_dyn/MapServer',
+        WFAS_url = "https://www.wfas.net/cgi-bin/mapserv?map=/var/www/html/nfdr/mapfiles/ndfd_geog5.map&",
+        Nexrad_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer',
+        snow_url = "https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer",
+        SurfaceObservation_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/obs_meteocean_insitu_sfc_time/MapServer',
+        Smoke_url = 'https://idpgis.ncep.noaa.gov/arcgis/services/NWS_Forecasts_Guidance_Warnings/ndgd_smoke_sfc_1hr_avg_time/ImageServer/WMSServer?',
+        NasaGibs_url = 'https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.jpg',
+        //FireCam_url = 'http://firecams.seismo.unr.edu/firecams/proxy/getptz?get=1',
+        FireCam_url = 'https://firemap.sdsc.edu:5443/stations?selection=boundingBox&minLat=32.5121&minLon=-124.6509&maxLat=49&maxLon=-114.1315',
+        FireCamImage = "http://api.nvseismolab.org/vulcan/v0/camera/{}/image",
+        USGS_elevationQuery_url = 'https://nationalmap.gov/epqs/pqs.php?x={}&y={}&units=Feet&output=json';
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/Basemap",
+      "esri/layers/MapImageLayer",
+      "esri/layers/FeatureLayer",
+      "esri/layers/GroupLayer",
+      "esri/widgets/Expand",
+      "esri/widgets/Legend",
+      "esri/widgets/Feature",
+      "esri/widgets/LayerList",
+      "esri/widgets/TimeSlider",
+      "esri/tasks/IdentifyTask",
+      "esri/tasks/support/IdentifyParameters",
+      "esri/Graphic",
+      "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0-rc.1/Chart.bundle.js",
+    ], function(
+      Map, MapView, Basemap, MapImageLayer, FeatureLayer, GroupLayer, Expand, Legend,
+      Feature, LayerList, TimeSlider, IdentifyTask, IdentifyParameters, Graphic, Chart
+    ) {
+
+    // Get the snow legend
+    $.getJSON("https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer/legend?f=json", function(LegendData){
+        for (var x = 0; x < LegendData.layers.length; x++) {
+            if (LegendData.layers[x].layerId === 3) {
+                legendJSON = LegendData.layers[x].legend
+                break
+            }
+        }
+    });
+    
+    var identifyTask, params;
+    
+    // URL to the map service where the identify will be performed
+    snow_url = "https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer";
+    
+    // Add the map service as a TileLayer for fast rendering
+    // Tile layers are composed of non-interactive images. For that reason we'll
+    // use IdentifyTask to query the service to add interactivity to the app
+    var snowLayer = new MapImageLayer({
+        url: snow_url,
+        opacity: 0.6,
+        sublayers: [{
+                id: 3,
+                visible: true,
+                title: 'Snow Depth (in)'
+            }
+        ]
+    });
+
+    // USFS layers
+        var road_template = {
+                    title: '{ID} | {NAME}',
+                    content: [{
+                        type: "fields",
+                        fieldInfos: [{
+                                fieldName: "OPER_MAINT_LEVEL",
+                                label: "OPER_MAINT_LEVEL",
+                                visible: true,
+                            },{
+                                fieldName: "SURFACE_TYPE",
+                                label: "SURFACE_TYPE",
+                                visible: true
+                            },{
+                                fieldName: "JURISDICTION",
+                                label: "JURISDICTION",
+                                visible: true
+                            },{
+                                fieldName: "MANAGING_ORG",
+                                label: "MANAGING_ORG",
+                                visible: true
+                            },{
+                                fieldName: "OPENFORUSETO",
+                                label: "OPENFORUSETO",
+                                visible: true
+                            },{
+                                fieldName: "GIS_MILES",
+                                label: "GIS_MILES",
+                                visible: true
+                            }]
+                    }]
+                }
+    var trail_template = {
+                    title: '{TRAIL_NO} | {TRAIL_NAME}',
+                    content: [{
+                        type: "fields",
+                        fieldInfos: [{
+                                fieldName: "TRAIL_TYPE",
+                                label: "TRAIL_TYPE",
+                                visible: true,
+                            },{
+                                fieldName: "TRAIL_CLASS",
+                                label: "TRAIL_CLASS",
+                                visible: true
+                            },{
+                                fieldName: "ALLOWED_TERRA_USE",
+                                label: "ALLOWED_TERRA_USE",
+                                visible: true
+                            },{
+                                fieldName: "MANAGING_ORG",
+                                label: "MANAGING_ORG",
+                                visible: true
+                            },{
+                                fieldName: "GIS_MILES",
+                                label: "GIS_MILES",
+                                visible: true
+                            }]
+                    }]
+                }
+    var FSCarto = new MapImageLayer({
+        url: 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMCartography_01/MapServer',
+        id: 'FSCarto',
+        title: 'Roads and Trails',
+        listMode: 'hide-children',
+        minScale: 300000,
+        sublayers: [
+            {
+				id: 6,
+				visible: true,
+				popupEnabled: true,
+				popupTemplate: road_template
+            },{
+				id: 5,
+				visible: true,
+				popupEnabled: true,
+				popupTemplate: road_template
+            },{
+				id: 4,
+				visible: true,
+				popupEnabled: true,
+				popupTemplate: trail_template
+            },{
+				id: 3,
+				visible: true,
+				popupEnabled: true,
+				popupTemplate: trail_template
+            },{
+				id: 2,
+				visible: true,
+				popupEnabled: true,
+				popupTemplate: trail_template
+            }
+        ]
+    });
+
+    var FSTopo = new MapImageLayer({
+        url: "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_FSTopo_01/MapServer",
+        id: "FSTopo",
+        title: 'FS Topo',
+        minScale: 200000,
+        listMode: 'hide-children',
+        visible: false
+    });
+    var admin = new MapImageLayer({
+        url: "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer", // AdminBoundary
+        id: "admin",
+        title: 'Administrative Boundary',
+        listMode: 'hide-children',
+    });
+    var FSOwner = FeatureLayer({
+        url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_BasicOwnership_02/MapServer/0',
+        id: 'FSOwner',
+        title: 'Private Land',
+        minScale: 400000,
+        definitionExpression: "OWNERCLASSIFICATION IN ('NON-FS', 'UNPARTITIONED RIPARIAN INTEREST')",
+        renderer: {
+            type: "simple",
+            symbol: {
+                type: "simple-fill",
+                style: "solid",
+                color: [100, 100, 100, 1],
+                outline: {
+                    type: "simple-line",
+                    style: "solid",
+                    color: [200, 200, 200, 1],
+                    width: 0.5
+                }
+            }
+        },
+        opacity: 0.3,
+    });
+    var FSWilderness = FeatureLayer({
+        url: 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMReference_01/MapServer/6',
+        id: 'FSWilderness',
+        title: 'Wilderness',
+        opacity: 0.6,
+        labelsVisible: false
+    });
+    var USFSgroup = new GroupLayer({
+        title: 'US Forest Service Layers',
+        id: 'USFS',
+        layers: [admin, FSCarto], // FSOwner, FSWilderness, FSTopo, 
+        visibilityMode: 'independent'
+    });
+    
+    // Create a custom basemap because the out-of-the-box terrain has wrong reference text
+    //var customBasemap = new Basemap({
+    //    baseLayers: [
+    //        new MapImageLayer({
+    //            url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer"
+    //        }),
+    //        new MapImageLayer({
+    //            url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer",
+    //            opacity: 0.25
+    //        })
+    //    ],
+    //    referenceLayers: [
+    //        new MapImageLayer({
+    //            url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer"
+    //        })
+    //    ],
+    //    title: "Custom Basemap",
+    //    id: "myBasemap"
+    //});
+    
+    map = new Map({
+        basemap: 'topo-vector',//customBasemap,//"terrain",
+        layers: [USFSgroup, snowLayer]
+      });
+
+    view = new MapView({
+        map: map,
+        container: "viewDiv",
+        center: [-111.664, 35.197],
+        zoom: 10,
+    });
+
+    view.when(function() {
+        // Legend widget
+        var legend = new Legend({
+            container: document.createElement("div"),
+            view: view,
+            style: 'classic',//{type:'card', layout: 'stack'},
+        });
+        var legendExpand = new Expand({
+            expandIconClass: "esri-icon-layers",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+            expandTooltip: "Legend", // optional, defaults to "Expand" for English locale
+            view: view,
+            expanded: true,
+            content: legend.domNode
+        });
+        view.ui.add(legendExpand, "top-right");
+        
+        InfoFeature = new Feature({
+            view: view,
+            container: document.createElement("div"),
+            graphic: {
+                popupTemplate: {
+                    content: 
+                    '</br><b><a href="https://www.nohrsc.noaa.gov/technology/" target="_blank">About the Data:</a></b></br>The National Operational Hydrologic Remote Sensing Center (NOHRSC) ingests daily ground-based, airborne, and </br>satellite snow observations from all available electronic sources for the coterminous U.S. These data are used along </br>with estimates of snowpack characteristics generated by a physically-based snow model to generate the operational, </br>daily NOAA National Snow Analyses (NSA) for the coterminous U.S. The NOHRSC snow model is an energy-and-mass-</br>balance, spatially-uncoupled, vertically-distributed, multi-layer snow model run operationally at 1-km² spatial resolution </br>and hourly temporal resolution for the nation. Ground-based and remotely-sensed snow observations are assimilated daily </br>into the simulated snow-model state variables. '
+                }
+            }
+        });
+
+        var InfoExpand = new Expand({
+            expandIconClass: "esri-icon-description",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+            expandTooltip: "Map Info", // optional, defaults to "Expand" for English locale
+            view: view,
+            expanded: true,
+            content: InfoFeature.domNode
+        });
+        view.ui.add(InfoExpand, {position:"top-left", index:0});
+        /*// Layer List
+        var layerList = new LayerList({
+            container: document.createElement("div"),
+            view: view,
+            // Expand the NDFD sublayer list
+            listItemCreatedFunction: function(event) {
+                if (event.item.title === "National Digital Forecast Database") {
+                    event.item.open = true;
+                }
+            }
+        });
+        view.ui.add(layerList, "top-left");*/
+
+        // Set the view Scale
+        view.scale = 1000000
+      
+        // executeIdentifyTask() is called each time the view is clicked
+        var clickHandle = view.on("click", executeIdentifyTask);
+      
+        // Create identify task for the specified map service
+        identifyTask = new IdentifyTask(snow_url);
+      
+        // Set the parameters for the Identify
+        params = new IdentifyParameters();
+        params.tolerance = 2;
+        params.layerIds = [3];
+        params.layerOption = "top";
+        params.width = view.width;
+        params.height = view.height;
+    });
+    // ------------------------------
+    // Identify nohrsc layer
+    //-------------------------------
+    function executeIdentifyTask(event) {
+        // Set the geometry to the location of the view click
+        params.geometry = event.mapPoint;
+        params.mapExtent = view.extent;
+        document.getElementById("viewDiv").style.cursor = "wait";
+    
+        // This function returns a promise that resolves to an array of features
+        // A custom popupTemplate is set for each feature based on the layer it
+        // originates from
+        identifyTask.execute(params).then(function(response) {
+    
+            var results = response.results;
+        
+            return results.map(function(result) {
+                var feature = result.feature;
+                var layerName = result.layerName;
+        
+                if (feature.attributes["Class value"] != 12){
+                    $.getJSON(USGS_elevationQuery_url.format(event.mapPoint.longitude, event.mapPoint.latitude), 
+                        function(data){
+                            var ddm = new toDDM(event.mapPoint)
+                            var elevation = data.USGS_Elevation_Point_Query_Service.Elevation_Query;
+                            var legendURL = legendJSON[feature.attributes["Class value"]].url
+                            var legendLabel = legendJSON[feature.attributes["Class value"]].label
+                            feature.popupTemplate = {
+                                title: "Snow Depth: {}".format(inches2feet(feature.attributes["Pixel Value"])),
+                                content: 
+                                '<img src="https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer/3/images/{}" style="opacity:0.6"></img>'.format(legendURL) +
+                                "  {} inches <br>".format(legendLabel) +
+                                "Elevation: {} {} <br>{} {}".format(elevation.Elevation.toFixed(), elevation.Units, ddm.lat, ddm.lng)
+                            };
+                        }
+                    )
+                    feature.attributes.layerName = layerName;
+                    //feature.popupTemplate = { // autocasts as new PopupTemplate()
+                    //  title: "Snow depth",
+                    //  content:  "{Pixel Value} inches <br>Class {Class value}"
+                    //};
+                } else {
+                    return
+                }
+                return feature;
+            });
+        }).then(showPopup); // Send the array of features to showPopup()
+    
+      // Shows the results of the Identify in a popup once the promise is resolved
+      function showPopup(response) {
+        if (response[0]) {
+          view.popup.open({
+            features: response,
+            location: event.mapPoint
+          });
+        }
+        document.getElementById("viewDiv").style.cursor = "auto";
+      }
+    }
+    function setContentInfo(datasets) {
+        var canvas = document.createElement('canvas');
+        canvas.id = "myChart";
+        canvas.width = 800;
+        canvas.height = 100;
+        
+        var config = {
+            type: 'line',
+            data: {
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                legend: {display: false},
+                tooltips: {
+                    mode: 'point',
+                    intersect: false,
+                },
+                hover: {
+                    mode: 'nearest',
+                    intersect: true
+                },
+                scales: {
+                    xAxes: [{
+                        type: 'time',
+                        min: NDFDCurrentLayerInfo.timeStops[0],
+                        max: NDFDCurrentLayerInfo.timeStops[NDFDCurrentLayerInfo.timeStops.length-1],
+                        distribution: 'linear',
+                        time: {
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'ddd, MMM D'
+                            },
+                            stepSize: 1
+                        },
+                        scaleLabel: {
+                            display: false,
+                            labelString: 'Time',
+                            fontSize: 0
+                        }
+                    }],
+                    yAxes: [{
+                        id: 'Primary',
+                        display: true,
+                        scaleLabel: {
+                            display: true,
+                            labelString: NDFDCurrentLayerInfo.title,
+                            fontSize: 11
+                        }
+                    }]
+                }
+            }
+        };
+        var chart = new Chart(canvas, config);
+        chart.maintainAspectRatio = false;
+        
+        return canvas
+    }
+    });
+  </script>
+</head>
+
+<body>
+    <div id="viewDiv"></div>
+    <div id="timeSliderDiv"></div>
+    <div id="plotDiv"></div>
+</body>
+
+</html>
