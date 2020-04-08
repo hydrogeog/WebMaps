@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>South Ops</title>
+  <link href="https://fonts.googleapis.com/css?family=Ubuntu:300&display=swap" rel="stylesheet">
+  <style>
+    * {
+        font-family: 'Ubuntu', sans-serif !important;
+        padding: 0;
+        margin: 0;
+    }    
+    html, body {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+    #viewDiv {
+        padding-top: 35px;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+	.grid-container {
+		display: grid;
+		grid-template-columns: auto auto;
+		grid-gap: 10px 10px;
+		padding: 10px;
+	}
+	.grid-item {
+		background-color: rgb(240, 240, 240);
+	}
+	.esri-feature {
+		background-color: rgba(50, 50, 50, 0.15);
+		color: rgb(220, 220, 220);
+		padding: 8px;
+		z-index: 1000;
+		white-space: pre;
+		max-width: 100%;
+		max-height: 300px;
+		overflow: auto;
+	}
+
+  </style>
+
+  <!-- google ajax CDN -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script
+      src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+      integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+      crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.14/"></script>
+  <script>
+    String.prototype.format = function () {
+        var i = 0, args = arguments;
+        return this.replace(/{}/g, function () {
+            return typeof args[i] != 'undefined' ? args[i++] : '';
+        });
+    };
+    function toDDM(coord){
+        // Convert coordinates to DDM for map popup    
+        this.convert = function(_coord){
+            _coord = Math.abs(_coord);
+            var degrees = Math.floor(_coord);
+            var minutes = (_coord - degrees ) * 60;
+            return degrees + '&deg; ' + minutes.toFixed(3) + "'";
+        };
+        this.lat = this.convert(coord.latitude) + (coord.latitude > 0 ? ' N' : ' S');
+        this.lng = this.convert(coord.longitude) + (coord.longitude > 0 ? ' E' : ' W');
+    };
+    function Num2Day(num) {
+		if (num.getUTCDate() === new Date().getDate()) {
+			return 'Today'
+		}
+		switch (num.getUTCDay()) {
+			case 0:
+				return 'Sunday'
+			case 1:
+				return 'Monday'
+			case 2:
+				return 'Tuesday'
+			case 3:
+				return 'Wednesday'
+			case 4:
+				return 'Thursday'
+			case 5:
+				return 'Friday'
+			case 6:
+				return 'Saturday'
+		};
+	};
+    function Num2Month(num) {
+		switch (num) {
+			case 0:
+				return 'January'
+			case 1:
+				return 'February'
+			case 2:
+				return 'March'
+			case 3:
+				return 'April'
+			case 4:
+				return 'May'
+			case 5:
+				return 'June'
+			case 6:
+				return 'July'
+			case 7:
+				return 'August'
+			case 8:
+				return 'September'
+			case 9:
+				return 'October'
+			case 10:
+				return 'November'
+			case 11:
+				return 'December'
+		};
+	};
+	
+    var times,
+		FireWeatherZone_forecast_url = 'https://fsapps.nwcg.gov/psp/arcgis/services/npsg/current_forecast/MapServer/WMSServer?',
+		FireWeatherZone_forecast_url2 = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/',
+		//timeQuery_url = "https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&returnGeometry=false&spatialRel=esriSpatialRelIntersects&maxAllowableOffset=152.87405657031186&geometry=%7B%22xmin%22%3A-13106178.702136584%2C%22ymin%22%3A4171109.0123496507%2C%22xmax%22%3A-13076826.883275084%2C%22ymax%22%3A4200460.831211151%2C%22spatialReference%22%3A%7B%22wkid%22%3A102100%2C%22latestWkid%22%3A3857%7D%7D&geometryType=esriGeometryEnvelope&inSR=102100&outFields=forecastdatapointid%2Cdrynesscode%2Csymbol%2Ctype%2Ctimestampdate&outSR=102100",
+		//timeQuery_url = "https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&where=1%3D1&returnGeometry=false&spatialRel=esriSpatialRelIntersects&objectIds=3335397%2C3335417%2C3335419%2C3335438%2C3335464%2C3335476%2C3335479&outFields=*&outSR=102100",
+        timeQuery_url = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&where=(1=1)&returnGeometry=false&spatialRel=esriSpatialRelIntersects&geometry={"xmin":-13186894.355927907,"ymin":4290962.356854799,"xmax":-13157542.537066408,"ymax":4320314.175716299,"spatialReference":{"wkid":102100,"latestWkid":3857}}&geometryType=esriGeometryEnvelope&inSR=102100&outFields=*&outSR=102100',
+		TZOffset = new Date().getTimezoneOffset()*60000,
+        TimberHarvest_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TimberHarvest_01/MapServer/8',
+        SilvicultureImprovement_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_SilvicultureTimberstandImprovement_01/MapServer/8',
+        SilvicultureReforestation_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_SilvicultureReforestation_01/MapServer/8',
+        Fuels_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_HazardousFuelsTreatments_01/MapServer/15',
+        USGSTopo_url = 'https://basemap.nationalmap.gov/ArcGIS/rest/services/USGSTopo/MapServer',
+        WorldImage_url = 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
+        FSTopo_url = "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_FSTopo_01/MapServer"
+        FSAdmin_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer',
+        FSTrail_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TrailNFSPublishForSync_01/FeatureServer/0',
+        FSRoad_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasicForSync_01/FeatureServer/2',
+        FSRec_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RecreationSitesOpenForSync_01/FeatureServer/0',
+        FSCarto_url = 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMCartography_01/MapServer',
+        FSOwner_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_BasicOwnership_02/MapServer/0',
+        FSWilderness_url = 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMReference_01/MapServer/6',
+        USGSTransport_url = 'https://services.nationalmap.gov/arcgis/rest/services/WFS/transportation/MapServer',
+        //USGSTransport_url = 'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer',
+        FireZone_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/forecast_meteoceanhydro_pts_zones_geolinks/MapServer',
+        Geomac_url = 'https://wildfire.cr.usgs.gov/arcgis/rest/services/geomac_dyn/MapServer',
+        WFAS_url = "https://www.wfas.net/cgi-bin/mapserv?map=/var/www/html/nfdr/mapfiles/ndfd_geog5.map&",
+        Nexrad_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer',
+        snow_url = "https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer",
+        SurfaceObservation_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/obs_meteocean_insitu_sfc_time/MapServer',
+        Smoke_url = 'https://idpgis.ncep.noaa.gov/arcgis/services/NWS_Forecasts_Guidance_Warnings/ndgd_smoke_sfc_1hr_avg_time/ImageServer/WMSServer?',
+        NasaGibs_url = 'https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.jpg',
+        USGS_elevationQuery_url = 'https://nationalmap.gov/epqs/pqs.php?x={}&y={}&units=Feet&output=json';
+    require([
+    "esri/Map",
+    "esri/views/MapView",
+    "esri/layers/MapImageLayer",
+    "esri/layers/TileLayer",
+    "esri/layers/FeatureLayer",
+    "esri/layers/GroupLayer",
+	"esri/layers/WMSLayer",
+    "esri/widgets/Feature",
+    "esri/widgets/Expand",
+    "esri/widgets/Legend",
+    "esri/widgets/LayerList",
+    "esri/widgets/CoordinateConversion",
+	"esri/widgets/Home"
+    ], function(Map, MapView, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, WMSLayer,
+        Feature, Expand, Legend, LayerList, CoordinateConversion, Home) {
+		//-------------------------------------------------------//
+		//        Fx to create a map for a given timestamp       //
+		//-------------------------------------------------------//
+		function createMap(t) {
+			var d = new Date(t);
+			var dateString = d.getUTCFullYear() + '-' + (d.getUTCMonth()+1) + '-' + d.getUTCDate();
+			console.log(dateString);
+			// Forecast layer
+			nwcg_forecast = WMSLayer({
+				url: FireWeatherZone_forecast_url,
+				id: "nwcg_forecast",
+				title: dateString,
+				opacity: 0.66,
+				listMode: 'hide-children',
+				version: '1.1.1',
+				mapUrl: FireWeatherZone_forecast_url.slice(0, -1),
+				featureInfoUrl: FireWeatherZone_forecast_url.slice(0, -1),
+				customParameters: {
+					'TIME': dateString + 'T00:00:00.0Z'
+				}
+			})
+			// Map
+			var map = new Map({
+					basemap: "topo",
+					layers: [nwcg_forecast]
+			});
+			// View
+			var view = new MapView({
+				map: map,
+				container: t.toString(),
+				center: [-117.664, 35.197],
+				zoom: 6,
+				navigation: {
+				  mouseWheelZoomEnabled: false,
+				  browserTouchPanEnabled: false
+				},
+				popup: {
+					defaultPopupTemplateEnabled: true
+				}
+			});
+			// Widgets
+			view.when(function() {
+				// CoordinateConversion widget
+				var ccWidget = new CoordinateConversion({
+					view: view
+				});
+				view.ui.add(ccWidget, "bottom-left");
+				// Home widget
+				var home = new Home({
+					view: view
+				});
+				view.ui.add(home, "top-left")
+				// Title widget
+				title = new Feature({
+					view: view,
+					graphic: {
+						popupTemplate: {
+							title: Num2Day(d),
+							content: Num2Month(d.getUTCMonth()) + ' ' + d.getUTCDate()
+						}
+					}
+				});
+				view.ui.add(title, "top-right")
+			});
+		};
+		//-------------------------------------------------------//
+		// JQuery chain that gets the timestamps and builds maps //
+		//-------------------------------------------------------//
+		
+		// Query the service to see how many forecast days there are
+		$.get(timeQuery_url)
+		// Parse the response, sort by date, and update the HTML grid with enough cells
+		.then(function(response){
+			var timestamps = []
+			JSON.parse(response).features.forEach(function(feature){
+				timestamps.push(feature.attributes.timestampdate)
+			})
+			var rows =  "500px ".repeat(Math.ceil(timestamps.length/2));
+			document.getElementById("map-grid").style.gridTemplateRows = rows;
+			return timestamps.sort()
+		// For each forecast day, create a DIV container and create a map to go inside it
+		}).then(function(timestamps){
+			timestamps.forEach(function(t){
+				var div = document.createElement("div");
+				div.classList.add("grid-item");
+				div.setAttribute("id", t);
+				document.getElementById("map-grid").appendChild(div);
+				createMap(t)
+			})
+			
+		})
+    });
+
+
+
+  </script>
+</head>
+
+<body>
+  <div class="grid-container" id="map-grid">
+<!--    <div class="grid-item" id="viewDiv0"></div>
+    <div class="grid-item" id="viewDiv1"></div>
+    <div class="grid-item" id="viewDiv2"></div>
+    <div class="grid-item" id="viewDiv3"></div>
+    <div class="grid-item" id="viewDiv4"></div>
+    <div class="grid-item" id="viewDiv5"></div>
+    <div class="grid-item" id="viewDiv6"></div>
+-->
+  </div>
+</body>
+
+</html>
