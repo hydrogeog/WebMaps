@@ -17,6 +17,9 @@
         height: 100%;
         width: 100%;
     }
+    ul {
+        list-style-type: circle;
+    }
     #viewDiv {
         padding-top: 35px;
         margin: 0;
@@ -25,12 +28,16 @@
     }
 	.grid-container {
 		display: grid;
-		grid-template-columns: auto auto;
-		grid-gap: 10px 10px;
-		padding: 10px;
+		grid-template-columns:50% 50%;
+		grid-gap: 1% 1%;
+		padding: 2%;
 	}
 	.grid-item {
 		background-color: rgb(240, 240, 240);
+	}
+	#placeholder {
+		padding: 3%;
+		display: inline;
 	}
 	.esri-feature {
 		background-color: rgba(50, 50, 50, 0.15);
@@ -123,7 +130,7 @@
 		};
 	};
 	
-    var times,
+    var times, allViews = [],
 		FireWeatherZone_forecast_url = 'https://fsapps.nwcg.gov/psp/arcgis/services/npsg/current_forecast/MapServer/WMSServer?',
 		FireWeatherZone_forecast_url2 = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/',
 		//timeQuery_url = "https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&returnGeometry=false&spatialRel=esriSpatialRelIntersects&maxAllowableOffset=152.87405657031186&geometry=%7B%22xmin%22%3A-13106178.702136584%2C%22ymin%22%3A4171109.0123496507%2C%22xmax%22%3A-13076826.883275084%2C%22ymax%22%3A4200460.831211151%2C%22spatialReference%22%3A%7B%22wkid%22%3A102100%2C%22latestWkid%22%3A3857%7D%7D&geometryType=esriGeometryEnvelope&inSR=102100&outFields=forecastdatapointid%2Cdrynesscode%2Csymbol%2Ctype%2Ctimestampdate&outSR=102100",
@@ -168,9 +175,10 @@
     "esri/widgets/Legend",
     "esri/widgets/LayerList",
     "esri/widgets/CoordinateConversion",
-	"esri/widgets/Home"
+	"esri/widgets/Home",
+	"esri/core/watchUtils"
     ], function(Map, MapView, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, WMSLayer,
-        Feature, Expand, Legend, LayerList, CoordinateConversion, Home) {
+        Feature, Expand, Legend, LayerList, CoordinateConversion, Home, watchUtils) {
 		//-------------------------------------------------------//
 		//        Fx to create a map for a given timestamp       //
 		//-------------------------------------------------------//
@@ -211,8 +219,12 @@
 					defaultPopupTemplateEnabled: true
 				}
 			});
+			allViews.push(view);
+						
 			// Widgets
 			view.when(function() {
+				// Move the zoom widget
+				view.ui.move("zoom", "top-right");
 				// CoordinateConversion widget
 				var ccWidget = new CoordinateConversion({
 					view: view
@@ -222,7 +234,7 @@
 				var home = new Home({
 					view: view
 				});
-				view.ui.add(home, "top-left")
+				view.ui.add(home, "top-right")
 				// Title widget
 				title = new Feature({
 					view: view,
@@ -233,7 +245,16 @@
 						}
 					}
 				});
-				view.ui.add(title, "top-right")
+				view.ui.add(title, "top-left")
+				// Watch for changes in view
+				watchUtils.whenTrue(view, "stationary", function() {
+					if (view.extent) {
+						console.log(dateString);
+						allViews.forEach(function(v) {
+							v.extent = view.extent;
+						});
+					}
+				});
 			});
 		};
 		//-------------------------------------------------------//
@@ -248,7 +269,7 @@
 			JSON.parse(response).features.forEach(function(feature){
 				timestamps.push(feature.attributes.timestampdate)
 			})
-			var rows =  "500px ".repeat(Math.ceil(timestamps.length/2));
+			var rows =  "500px ".repeat(Math.ceil((timestamps.length + 1) / 2));
 			document.getElementById("map-grid").style.gridTemplateRows = rows;
 			return timestamps.sort()
 		// For each forecast day, create a DIV container and create a map to go inside it
@@ -271,6 +292,16 @@
 
 <body>
   <div class="grid-container" id="map-grid">
+    <div class="grid-item" id="placeholder">
+	  <b>Ideas</b>
+	  <ul>
+	    <li>South Ops GACC Boundary</li>
+	    <li>Link Views together</li>
+	    <li>WFAS ERC Data</li>
+	    <li>Fire Weather Zone map with text forecast</li>
+	    <li>Summarize ERC/FBI by PSA and make click-able on each map</li>
+	  </ul>
+	</div>
 <!--    <div class="grid-item" id="viewDiv0"></div>
     <div class="grid-item" id="viewDiv1"></div>
     <div class="grid-item" id="viewDiv2"></div>
