@@ -4,10 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>South Ops</title>
-  <link href="https://fonts.googleapis.com/css?family=Ubuntu:300&display=swap" rel="stylesheet">
   <style>
     * {
-        font-family: 'Ubuntu', sans-serif !important;
+		font-family: "Avenir Next W00","Helvetica Neue",Helvetica,Arial,sans-serif;
         padding: 0;
         margin: 0;
     }    
@@ -29,14 +28,15 @@
 	.grid-container {
 		display: grid;
 		grid-template-columns:50% 50%;
-		grid-gap: 1% 1%;
-		padding: 2%;
+		grid-gap: 10px 10px;
+		padding: 10px 20px 10px 10px;
 	}
 	.grid-item {
 		background-color: rgb(240, 240, 240);
 	}
 	#placeholder {
-		padding: 3%;
+		padding-left: 40px;
+		padding-top: 10px;
 		display: inline;
 	}
 	.esri-feature {
@@ -131,11 +131,17 @@
 	};
 	
     var times, allViews = [],
-		FireWeatherZone_forecast_url = 'https://fsapps.nwcg.gov/psp/arcgis/services/npsg/current_forecast/MapServer/WMSServer?',
-		FireWeatherZone_forecast_url2 = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/',
+		FireWeatherZone_forecast_WMSurl = 'https://fsapps.nwcg.gov/psp/arcgis/services/npsg/current_forecast/MapServer/WMSServer?',
+		FireWeatherZone_forecast_url = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/',
 		//timeQuery_url = "https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&returnGeometry=false&spatialRel=esriSpatialRelIntersects&maxAllowableOffset=152.87405657031186&geometry=%7B%22xmin%22%3A-13106178.702136584%2C%22ymin%22%3A4171109.0123496507%2C%22xmax%22%3A-13076826.883275084%2C%22ymax%22%3A4200460.831211151%2C%22spatialReference%22%3A%7B%22wkid%22%3A102100%2C%22latestWkid%22%3A3857%7D%7D&geometryType=esriGeometryEnvelope&inSR=102100&outFields=forecastdatapointid%2Cdrynesscode%2Csymbol%2Ctype%2Ctimestampdate&outSR=102100",
 		//timeQuery_url = "https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&where=1%3D1&returnGeometry=false&spatialRel=esriSpatialRelIntersects&objectIds=3335397%2C3335417%2C3335419%2C3335438%2C3335464%2C3335476%2C3335479&outFields=*&outSR=102100",
         timeQuery_url = 'https://fsapps.nwcg.gov/psp/arcgis/rest/services/npsg/current_forecast/MapServer/0/query?f=json&where=(1=1)&returnGeometry=false&spatialRel=esriSpatialRelIntersects&geometry={"xmin":-13186894.355927907,"ymin":4290962.356854799,"xmax":-13157542.537066408,"ymax":4320314.175716299,"spatialReference":{"wkid":102100,"latestWkid":3857}}&geometryType=esriGeometryEnvelope&inSR=102100&outFields=*&outSR=102100',
+		GACC_url = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/National_GACC_Current/FeatureServer/0",
+		latest_forcast = "https://fsapps.nwcg.gov/psp/npsg/forecast/api/gaccs/8/latest-forecast",
+		parameters = "https://fsapps.nwcg.gov/psp/npsg/forecast/api/parameters",
+		parameter_data = "https://fsapps.nwcg.gov/psp/npsg/forecast/api/forecasts/11e25a35-3923-48aa-8f65-94c45718a02d/parameter-data",
+		data = "https://fsapps.nwcg.gov/psp/npsg/forecast/api/forecasts/11e25a35-3923-48aa-8f65-94c45718a02d/data",
+		
 		TZOffset = new Date().getTimezoneOffset()*60000,
         TimberHarvest_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TimberHarvest_01/MapServer/8',
         SilvicultureImprovement_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_SilvicultureTimberstandImprovement_01/MapServer/8',
@@ -169,48 +175,75 @@
     "esri/layers/TileLayer",
     "esri/layers/FeatureLayer",
     "esri/layers/GroupLayer",
-	"esri/layers/WMSLayer",
     "esri/widgets/Feature",
     "esri/widgets/Expand",
     "esri/widgets/Legend",
     "esri/widgets/LayerList",
     "esri/widgets/CoordinateConversion",
 	"esri/widgets/Home",
-	"esri/core/watchUtils"
-    ], function(Map, MapView, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, WMSLayer,
-        Feature, Expand, Legend, LayerList, CoordinateConversion, Home, watchUtils) {
-		//-------------------------------------------------------//
-		//        Fx to create a map for a given timestamp       //
-		//-------------------------------------------------------//
-		function createMap(t) {
+	"esri/renderers/SimpleRenderer",
+	"esri/core/watchUtils",
+    "dojo/domReady!"
+    ], function(Map, MapView, MapImageLayer, TileLayer, FeatureLayer, GroupLayer,
+        Feature, Expand, Legend, LayerList, CoordinateConversion, Home, SimpleRenderer, watchUtils) {
+		/*-------------------------------------------------------//
+		//                 Setting up the map                    //
+		//-------------------------------------------------------*/
+		// Forecast layer
+		var nwcg_forecast =  MapImageLayer({
+			url: FireWeatherZone_forecast_url,
+			outFields: ['*'],
+			opacity: 0.67,
+			id: "nwcg_forecast",
+			title: 'nwcg_forecast',
+			visible: true,
+			popupEnabled: true,
+		})
+		// GACC layer
+		var GACC = new FeatureLayer({
+			url: GACC_url,
+			id: "GACC",
+			title: 'GACC',
+			definitionExpression: "GACCAbbreviation	= 'OSCC'",
+			visible: true,
+			popupEnabled: false,
+			renderer: new SimpleRenderer({
+				//type: "simple",
+				symbol: {
+					type: "simple-fill",
+					style: "solid",
+					color: [0, 0, 0, 0],
+					outline: {
+						type: "simple-line",
+						style: "simple",
+						color: [0, 0, 0, 1],
+						width: 2
+					}
+				}
+			})
+		});
+		// Map
+		var map = new Map({
+				basemap: "topo",
+				layers: [nwcg_forecast, GACC]
+		});
+		/*-------------------------------------------------------//
+		//        Fx to create a view for a given timestamp      //
+		//-------------------------------------------------------*/
+		function createView(t) {
 			var d = new Date(t);
 			var dateString = d.getUTCFullYear() + '-' + (d.getUTCMonth()+1) + '-' + d.getUTCDate();
 			console.log(dateString);
-			// Forecast layer
-			nwcg_forecast = WMSLayer({
-				url: FireWeatherZone_forecast_url,
-				id: "nwcg_forecast",
-				title: dateString,
-				opacity: 0.66,
-				listMode: 'hide-children',
-				version: '1.1.1',
-				mapUrl: FireWeatherZone_forecast_url.slice(0, -1),
-				featureInfoUrl: FireWeatherZone_forecast_url.slice(0, -1),
-				customParameters: {
-					'TIME': dateString + 'T00:00:00.0Z'
-				}
-			})
-			// Map
-			var map = new Map({
-					basemap: "topo",
-					layers: [nwcg_forecast]
-			});
 			// View
 			var view = new MapView({
 				map: map,
 				container: t.toString(),
 				center: [-117.664, 35.197],
 				zoom: 6,
+				timeExtent: {
+					start: new Date(t),
+					end:   new Date(t)
+				},
 				navigation: {
 				  mouseWheelZoomEnabled: false,
 				  browserTouchPanEnabled: false
@@ -249,7 +282,6 @@
 				// Watch for changes in view
 				watchUtils.whenTrue(view, "stationary", function() {
 					if (view.extent) {
-						console.log(dateString);
 						allViews.forEach(function(v) {
 							v.extent = view.extent;
 						});
@@ -257,12 +289,12 @@
 				});
 			});
 		};
-		//-------------------------------------------------------//
+		/*-------------------------------------------------------//
 		// JQuery chain that gets the timestamps and builds maps //
-		//-------------------------------------------------------//
+		//-------------------------------------------------------*/
 		
 		// Query the service to see how many forecast days there are
-		$.get(timeQuery_url)
+		$.get({url: timeQuery_url, cache: false})
 		// Parse the response, sort by date, and update the HTML grid with enough cells
 		.then(function(response){
 			var timestamps = []
@@ -279,7 +311,7 @@
 				div.classList.add("grid-item");
 				div.setAttribute("id", t);
 				document.getElementById("map-grid").appendChild(div);
-				createMap(t)
+				createView(t)
 			})
 			
 		})
@@ -293,13 +325,14 @@
 <body>
   <div class="grid-container" id="map-grid">
     <div class="grid-item" id="placeholder">
-	  <b>Ideas</b>
+	  <u><b>Ideas</b></u>
 	  <ul>
 	    <li>South Ops GACC Boundary</li>
 	    <li>Link Views together</li>
 	    <li>WFAS ERC Data</li>
 	    <li>Fire Weather Zone map with text forecast</li>
 	    <li>Summarize ERC/FBI by PSA and make click-able on each map</li>
+	    <li>Legend</li>
 	  </ul>
 	</div>
 <!--    <div class="grid-item" id="viewDiv0"></div>
