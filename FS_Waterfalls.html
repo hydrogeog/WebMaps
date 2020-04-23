@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Waterfalls</title>
+  <link href="https://fonts.googleapis.com/css?family=Ubuntu:300&display=swap" rel="stylesheet">
+  <style>
+    * {
+       font-family: 'Ubuntu', sans-serif !important;
+    }    
+    html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+    .esri-popup .esri-popup-header .esri-title {
+        font-size: 18px;
+        font-weight: bolder;
+    }
+
+    .esri-popup .esri-popup-body .esri-popup-content {
+        font-size: 14px;
+    }
+  </style>
+
+  <!-- google ajax CDN -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script
+      src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+      integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+      crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.15/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.15/"></script>
+  <script>
+    String.prototype.format = function () {
+        var i = 0, args = arguments;
+        return this.replace(/{}/g, function () {
+            return typeof args[i] != 'undefined' ? args[i++] : '';
+        });
+    };
+    function toDDM(coord){
+        // Convert coordinates to DDM for map popup    
+        this.convert = function(_coord){
+            _coord = Math.abs(_coord);
+            var degrees = Math.floor(_coord);
+            var minutes = (_coord - degrees ) * 60;
+            return degrees + '&deg; ' + minutes.toFixed(3) + "'";
+        };
+        this.lat = this.convert(coord.latitude) + (coord.latitude > 0 ? ' N' : ' S');
+        this.lng = this.convert(coord.longitude) + (coord.longitude > 0 ? ' E' : ' W');
+    }
+    var map, view, 
+        TZOffset = new Date().getTimezoneOffset()*60000,
+        USGSTopo_url = 'https://basemap.nationalmap.gov/ArcGIS/rest/services/USGSTopo/MapServer',
+        WorldImage_url = 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer',
+        FSTopo_url = "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_FSTopo_01/MapServer"
+        FSAdmin_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer',
+        FSTrail_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TrailNFSPublishForSync_01/FeatureServer/0',
+        FSRoad_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasic_01/MapServer',
+        FSRec_url = 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RecreationSitesOpenForSync_01/FeatureServer/0',
+        USGSTransport_url = 'https://services.nationalmap.gov/arcgis/rest/services/WFS/transportation/MapServer',
+        //USGSTransport_url = 'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer',
+        FSStations_url = 'https://apps.fs.usda.gov/fsgisx02/rest/services/wo_ops_teams/S_WO_OPS_TEAMS_EU_SOI_01/FeatureServer/0',
+        FireZone_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/forecast_meteoceanhydro_pts_zones_geolinks/MapServer',
+        Geomac_url = 'https://wildfire.cr.usgs.gov/arcgis/rest/services/geomac_dyn/MapServer',
+        WFAS_url = "https://www.wfas.net/cgi-bin/mapserv?map=/var/www/html/nfdr/mapfiles/ndfd_geog5.map&",
+        Nexrad_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer',
+        snow_url = "https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer",
+        SurfaceObservation_url = 'https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/obs_meteocean_insitu_sfc_time/MapServer',
+        Smoke_url = 'https://idpgis.ncep.noaa.gov/arcgis/services/NWS_Forecasts_Guidance_Warnings/ndgd_smoke_sfc_1hr_avg_time/ImageServer/WMSServer?',
+        NasaGibs_url = 'https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.jpg',
+        //FireCam_url = 'http://firecams.seismo.unr.edu/firecams/proxy/getptz?get=1',
+        FireCam_url = 'https://firemap.sdsc.edu:5443/stations?selection=boundingBox&minLat=32.5121&minLon=-124.6509&maxLat=49&maxLon=-114.1315',
+        FireCamImage = "http://api.nvseismolab.org/vulcan/v0/camera/{}/image",
+        USGS_elevationQuery_url = 'https://nationalmap.gov/epqs/pqs.php?x={}&y={}&units=Feet&output=json';
+    require([
+    "esri/Map",
+    "esri/views/MapView",
+    "esri/layers/MapImageLayer",
+    "esri/layers/TileLayer",
+    "esri/layers/FeatureLayer",
+    "esri/layers/GroupLayer",
+	"esri/layers/support/LabelClass",
+    "esri/widgets/Expand",
+    "esri/widgets/Legend",
+    "esri/widgets/LayerList",
+    "esri/widgets/Search",
+    "esri/Basemap",
+    "esri/widgets/BasemapToggle",
+    "esri/widgets/CoordinateConversion",
+    "esri/widgets/Print",
+    ], function(Map, MapView, MapImageLayer, TileLayer, FeatureLayer, GroupLayer, LabelClass,
+        Expand, Legend, LayerList, Search, BaseMap, BasemapToggle, CoordinateConversion, Print) {
+
+		/*var waterfalls = new MapImageLayer({
+			url: "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer",
+            id: 'Waterfalls',
+            title: 'USGS Waterfalls',
+			minScale: null,
+			visble: true,
+			sublayers: [{
+                    id: 0,
+                    visible: true,
+                    popupEnabled: true,
+                    popupTemplate: {title: '{GNIS_NAME}'},
+					definitionExpression: "FTYPE = 487",
+					//minScale: null,
+                }]
+		});*/
+		var waterfalls = new FeatureLayer({
+			url: "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/0",
+            id: 'Waterfalls',
+            title: 'Waterfalls',
+			minScale: null,
+			visble: true,
+			definitionExpression: "FTYPE = 487",
+			labelingInfo : new LabelClass({
+				  labelExpressionInfo: { expression: "$feature.GNIS_NAME" },
+				  where: "GNIS_NAME IS NOT NULL",
+				  symbol: {
+					type: "text",  // autocasts as new TextSymbol()
+					color: [115, 178, 255, 255],
+					font: {weight: "bold"},
+					haloSize: 0.5,
+					haloColor: "black"
+				  }
+				})
+		});
+		
+        // USFS layers
+        var road_template = {
+                        title: '{ID} | {NAME}',
+                        content: [{
+                            type: "fields",
+                            fieldInfos: [{
+                                    fieldName: "OPER_MAINT_LEVEL",
+                                    label: "OPER_MAINT_LEVEL",
+                                    visible: true,
+                                },{
+                                    fieldName: "SURFACE_TYPE",
+                                    label: "SURFACE_TYPE",
+                                    visible: true
+                                },{
+                                    fieldName: "JURISDICTION",
+                                    label: "JURISDICTION",
+                                    visible: true
+                                },{
+                                    fieldName: "MANAGING_ORG",
+                                    label: "MANAGING_ORG",
+                                    visible: true
+                                },{
+                                    fieldName: "OPENFORUSETO",
+                                    label: "OPENFORUSETO",
+                                    visible: true
+                                },{
+                                    fieldName: "GIS_MILES",
+                                    label: "GIS_MILES",
+                                    visible: true
+                                }]
+                        }]
+                    }
+        var trail_template = {
+                        title: '{TRAIL_NO} | {TRAIL_NAME}',
+                        content: [{
+                            type: "fields",
+                            fieldInfos: [{
+                                    fieldName: "TRAIL_TYPE",
+                                    label: "TRAIL_TYPE",
+                                    visible: true,
+                                },{
+                                    fieldName: "TRAIL_CLASS",
+                                    label: "TRAIL_CLASS",
+                                    visible: true
+                                },{
+                                    fieldName: "ALLOWED_TERRA_USE",
+                                    label: "ALLOWED_TERRA_USE",
+                                    visible: true
+                                },{
+                                    fieldName: "MANAGING_ORG",
+                                    label: "MANAGING_ORG",
+                                    visible: true
+                                },{
+                                    fieldName: "GIS_MILES",
+                                    label: "GIS_MILES",
+                                    visible: true
+                                }]
+                        }]
+                    }
+		var FSCarto = new MapImageLayer({
+            url: 'https://apps.fs.usda.gov/fsgisx05/rest/services/wo_nfs_gtac/EGIS_RecreationBasemap_01/MapServer',
+            id: 'FSCarto',
+            title: 'FSCarto',
+            listMode: 'hide-children',
+            //minScale: 200000,
+            visible: true,
+        });
+
+        var FSTopo = new TileLayer({
+            url: FSTopo_url,
+            id: "FSTopo",
+            title: 'FS Topo',
+            //minScale: 200000,
+            //listMode: 'hide-children',
+            //visible: false
+        });
+        var admin = new MapImageLayer({
+            url: "https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer", // AdminBoundary
+            id: "admin",
+            title: 'Administrative Boundary',
+            listMode: 'hide-children',
+        });
+        var USFSgroup = new GroupLayer({
+            title: 'US Forest Service Layers',
+            id: 'USFS',
+            layers: [admin, FSCarto],
+            visibilityMode: 'independent'
+        });
+        var map = new Map({
+                basemap: "topo-vector",
+                layers: [USFSgroup, waterfalls]
+        });
+        var view = new MapView({
+            map: map,
+            container: "viewDiv",
+            center: [-113.659891, 45.051432],
+            zoom: 7,
+            //popup: {
+            //    defaultPopupTemplateEnabled: true
+            //}
+        });
+
+
+        view.when(function() {
+            // Legend widget
+            var legend = new Legend({
+                container: document.createElement("div"),
+                view: view,
+                //style: 'classic',//{type:'card', layout: 'stack'},
+            });
+            var legendExpand = new Expand({
+                expandIconClass: "esri-icon-layers",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+                expandTooltip: "Legend", // optional, defaults to "Expand" for English locale
+                view: view,
+                expanded: false,
+                content: legend.domNode
+            });
+            view.ui.add(legendExpand, "top-right");
+            // Layer List
+            var layerList = new LayerList({
+                container: document.createElement("div"),
+                view: view,
+                // Legend in layer list
+                listItemCreatedFunction: function(event) {
+                    if (event.item.layer.type != "group") {
+                        event.item.panel = {
+                            content: "legend",
+                            open: false
+                        };
+                    }
+                }
+            });
+            view.ui.add(layerList, "top-left");
+            // CoordinateConversion widget
+            var ccWidget = new CoordinateConversion({
+                view: view
+            });
+            view.ui.add(ccWidget, "bottom-left");
+            // Basemap toggle
+            var basemapToggle = new BasemapToggle({
+                view: view,  // The view that provides access to the map's "streets" basemap
+                nextBasemap: new BaseMap({baseLayers: [FSTopo]}) // Allows for toggling to the "hybrid" basemap
+            });
+            view.ui.add(basemapToggle, {position: "bottom-right"});
+            // Search widget
+            var searchWidget = new Search({
+                container: document.createElement("div"),
+                view: view,
+                allPlaceholder: "Search for places or features",
+                searchAllEnabled: true,
+                locationEnabled: false,
+                includeDefaultSources: false,
+                goToOverride: function(view, goToParams){ // prevent selection from zooming
+                    goToParams.target.zoom = view.zoom;
+                    goToParams.target.center = view.center;
+                    return view.goTo(goToParams.target, goToParams.options);
+                },
+                sources: [{
+                    layer: new FeatureLayer({
+                        url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasic_01/MapServer/0',
+                        outFields: ["*"]}),
+                    searchFields: ['ID', 'NAME'],
+                    displayField: "NAME",
+                    suggestionsEnabled: true,
+                    suggestionTemplate : '{ID} <span>&#124;</span> {NAME}',
+                    exactMatch: true,
+                    outFields: ["*"],
+                    name: 'Roads',
+                    withinViewEnabled: true,
+                    placeholder: "Road name or ID",
+                    popupTemplate: road_template
+                },{
+                    layer: new FeatureLayer({
+                        url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_RoadBasic_01/MapServer/1',
+                        outFields: ["*"]}),
+                    searchFields: ['ID', 'NAME'],
+                    displayField: "NAME",
+                    suggestionsEnabled: true,
+                    suggestionTemplate : '{ID} <span>&#124;</span> {NAME}',
+                    exactMatch: true,
+                    outFields: ["*"],
+                    name: 'Closed Roads',
+                    withinViewEnabled: true,
+                    placeholder: "Road name or ID",
+                    popupTemplate: road_template
+                },{
+                    layer: new FeatureLayer({
+                        url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_TrailNFSPublish_01/MapServer/0',
+                        outFields: ["*"]}),
+                    searchFields: ['TRAIL_NO', 'TRAIL_NAME'],
+                    displayField: "TRAIL_NAME",
+                    exactMatch: true,
+                    outFields: ["*"],
+                    name: 'Trails',
+                    withinViewEnabled: true,
+                    suggestionsEnabled: true,
+                    suggestionTemplate : '{TRAIL_NO} <span>&#124;</span> {TRAIL_NAME}',
+                    placeholder: "Trail name or ID",
+                    popupTemplate: trail_template
+                },{
+                    layer: new FeatureLayer({
+                        url: 'https://apps.fs.usda.gov/arcx/rest/services/wo_nfs_gstc/GSTC_IVMCartography_01/MapServer/1',
+                        outFields: ["*"]}),
+                    searchFields: ['RECAREANAME'],
+                    displayField: "RECAREANAME",
+                    suggestionsEnabled: true,
+                    exactMatch: false,
+                    outFields: ["*"],
+                    withinViewEnabled: true,
+                    name: 'Recreation',
+                    placeholder: "Rec site name",
+                    popupTemplate: {
+                        title: '{RECAREANAME}', 
+                        content: "{*}"
+                    }
+                },{
+                    layer: new FeatureLayer({
+                        url: "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/1", 
+                        outFields: ["*"]}),
+                    searchFields: ["gaz_name"],
+                    displayField: "gaz_name",
+                    exactMatch: false,
+                    outFields: ["*"],
+                    name: "Landforms",
+                    withinViewEnabled: true,
+                    placeholder: "Landform",
+                    popupTemplate: {
+                        title: '{gaz_name}', 
+                        content: "{*}",
+                    }
+                },{
+                    layer: new FeatureLayer({
+                        url: "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/2",
+                        //url: 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/5',},
+                        outFields: ["*"]}),
+                    searchFields: ["gaz_name"],
+                    displayField: "gaz_name",
+                    exactMatch: false,
+                    outFields: ["*"],
+                    name: "Streams/Rivers",
+                    withinViewEnabled: true,
+                    placeholder: "Stream/River name",
+                    popupTemplate: {
+                        title: '{gaz_name}', 
+                        content: "{*}"
+                    }
+                },{
+                    layer: new FeatureLayer({
+                        url: "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/9",
+                        outFields: ["*"]}),
+                    searchFields: ["GNIS_NAME"],
+                    displayField: "GNIS_NAME",
+                    suggestionTemplate: "{GNIS_NAME}",
+                    exactMatch: false,
+                    outFields: ["*"],
+                    name: "Waterbodies",
+                    withinViewEnabled: true,
+                    placeholder: "Waterbody name",
+                    popupTemplate: {
+                        title: '{GNIS_NAME}', 
+                        content: "{*}"
+                    }
+                },{
+                    layer: new FeatureLayer({
+                        url: "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/13",
+                        outFields: ["*"]}),
+                    searchFields: ["gaz_name"],
+                    displayField: "gaz_name",
+                    exactMatch: false,
+                    outFields: ["*"],
+                    name: "Locales",
+                    withinViewEnabled: true,
+                    placeholder: "Locale",
+                    popupTemplate: {
+                        title: '{gaz_name}', 
+                        content: "{*}"
+                    }
+                },{
+                    layer: new FeatureLayer({
+                        url: "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/18",
+                        outFields: ["*"]}),
+                    searchFields: ["gaz_name"],
+                    displayField: "gaz_name",
+                    exactMatch: false,
+                    outFields: ["*"],
+                    name: "Populated Places",
+                    withinViewEnabled: true,
+                    placeholder: "Populated Place",
+                    popupTemplate: {
+                        title: '{gaz_name}', 
+                        content: "{*}"
+                    }
+                }]
+            });
+            var SearchExpand = new Expand({
+                expandIconClass: "esri-icon-search",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+                expandTooltip: "Search", // optional, defaults to "Expand" for English locale
+                view: view,
+                content: searchWidget.domNode
+            });
+            view.ui.add(SearchExpand, {position: "top-left"});        
+            // Print widget
+            var print = new Print({
+                container: document.createElement("div"),
+                view: view,
+                //printServiceUrl: "https://apps.fs.usda.gov/arcx/rest/services/Utilities/PrintingTools/GPServer/Export%20Web%20Map%20Task"
+                printServiceUrl: "https://utility.arcgisonline.com/arcgis/rest/services/Utilities/PrintingTools/GPServer/Export%20Web%20Map%20Task"
+            });
+            var printExpand = new Expand({
+                expandIconClass: "esri-icon-printer",  // see https://developers.arcgis.com/javascript/latest/guide/esri-icon-font/
+                expandTooltip: "Search", // optional, defaults to "Expand" for English locale
+                view: view,
+                content: print.domNode
+            });
+            view.ui.add(printExpand, {position: "top-right"});
+        });
+    });
+
+
+
+  </script>
+</head>
+
+<body>
+    <div id="viewDiv">
+    </div>
+</body>
+
+</html>
